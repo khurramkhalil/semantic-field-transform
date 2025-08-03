@@ -205,3 +205,94 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# =============================================================================
+# SFT Research Project - Data and Model Files
+# =============================================================================
+
+# Dataset files
+data/
+datasets/
+*.tsv
+*.json
+*.jsonl
+*.parquet
+*.feather
+
+# Raw data directories
+raw_data/
+processed_data/
+train_data/
+test_data/
+validation_data/
+
+# Model files and checkpoints
+models/
+checkpoints/
+saved_models/
+*.pth
+*.pt
+*.ckpt
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.safetensors
+
+# Model outputs and predictions
+outputs/
+predictions/
+results/
+*.npz
+*.npy
+
+# Training logs and metrics
+tensorboard_logs/
+wandb/
+mlruns/
+*.log
+
+# Large temporary files
+temp/
+tmp/
+*.tmp
+cache/
+.cache/
+
+# Research notebooks (optional - you might want to track some)
+# *.ipynb
+# notebooks/
+
+# Configuration files with sensitive info (if any)
+.env.local
+config.local.py
+secrets.json
+
+# Performance profiling
+*.prof
+*.profile
+
+# CUDA cache (if using GPU)
+__pycache__/
+.pytest_cache/
+
+# Research-specific ignores
+embeddings/
+pretrained/
+downloaded_models/
+fine_tuned/
+tokenizers/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
