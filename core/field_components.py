@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-Core field components for Semantic Field Transform
-Modular components that can be easily imported and reused
+Core SFT v2 Field Components
+Implements the advanced theoretical framework based on non-Abelian gauge theory.
+
+- MultiComponentLocalField: Creates spinor-like semantic fields.
+- GaugeFieldGenerator: Learns the syntactic gauge connection field.
+- GaugeFieldEvolution: Implements field dynamics via the covariant derivative.
 """
 
 import torch
@@ -9,192 +13,182 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-class LocalSemanticField(nn.Module):
+# ============================================================================
+# 1. SFT v2: SEMANTIC FIELD CONSTRUCTION (MULTI-COMPONENT)
+# ============================================================================
+
+class MultiComponentLocalField_v2(nn.Module):
     """
-    Creates truly LOCAL semantic fields where each byte contributes
-    to a localized region, preserving word order and syntactic structure.
-    
-    FIXED: No global smearing - each position maintains local information
+    Creates a multi-component (spinor-like) local semantic field.
+    This field Ψ has components that can represent latent semantic roles.
+    Output shape: [Batch, Position, N_Components, SemanticDim]
     """
     
-    def __init__(self, semantic_dim=256, field_resolution=512, locality_width=0.02):
+    def __init__(self, semantic_dim=128, field_resolution=128, n_components=2):
         super().__init__()
         self.semantic_dim = semantic_dim
         self.field_resolution = field_resolution
-        self.locality_width = locality_width
+        self.n_components = n_components
         
-        # Rich byte semantic representations
-        self.byte_semantic_generators = nn.Embedding(256, semantic_dim)
+        # The embedding now generates a representation for all components
+        self.byte_semantic_generators = nn.Embedding(256, semantic_dim * n_components)
         
-        # Learnable locality parameters for each byte type
-        self.locality_shapes = nn.Parameter(torch.randn(256, 4))  # [offset, width, amplitude, phase]
-        
-        # Context-aware amplitude modulation
-        self.context_modulator = nn.Sequential(
-            nn.Conv1d(256, 128, kernel_size=7, padding=3),
-            nn.GELU(),
-            nn.Conv1d(128, 64, kernel_size=5, padding=2),
-            nn.GELU(),
-            nn.Conv1d(64, 1, kernel_size=3, padding=1),
-            nn.Sigmoid()
-        )
-        
-        # Multi-scale locality (for capturing different linguistic structures)
-        self.multiscale_widths = nn.Parameter(torch.tensor([0.01, 0.02, 0.05, 0.1]))
-        self.scale_weights = nn.Parameter(torch.ones(4))
-        
-    def compute_local_continuous_field(self, byte_sequence, continuous_positions):
+        # Learnable locality parameters remain similar
+        self.locality_shapes = nn.Parameter(torch.randn(256, 3))  # [offset, width, amplitude]
+
+    def forward(self, byte_sequence, continuous_positions):
         """
-        Create continuous field as superposition of LOCAL contributions
-        Each byte creates a localized "wave packet" in semantic space
+        Create a continuous, multi-component field as a superposition of local contributions.
         """
         batch_size, seq_len = byte_sequence.shape
         _, n_positions = continuous_positions.shape
         
-        # Get semantic amplitudes for each byte
-        byte_amplitudes = self.byte_semantic_generators(byte_sequence)  # [B, L, D]
+        # Get semantic amplitudes for each byte for all components
+        byte_amplitudes_flat = self.byte_semantic_generators(byte_sequence)  # [B, L, D * Nc]
+        byte_amplitudes = byte_amplitudes_flat.view(
+            batch_size, seq_len, self.n_components, self.semantic_dim
+        ) # [B, L, Nc, D]
         
-        # Compute context-dependent modulation
-        byte_onehot = F.one_hot(byte_sequence, 256).float().transpose(1, 2)  # [B, 256, L]
-        context_influence = self.context_modulator(byte_onehot).squeeze(1)  # [B, L]
-        
-        # Apply context modulation to amplitudes
-        modulated_amplitudes = byte_amplitudes * context_influence.unsqueeze(-1)
-        
-        # Byte positions in continuous space [0,1]
         byte_positions = torch.linspace(0, 1, seq_len, device=byte_sequence.device)
-        byte_positions = byte_positions.unsqueeze(0).repeat(batch_size, 1)  # [B, L]
         
-        # Initialize semantic field
-        semantic_field = torch.zeros(batch_size, n_positions, self.semantic_dim, 
-                                   device=byte_sequence.device)
+        # Superposition of local contributions
+        x_diff = continuous_positions.unsqueeze(-1) - byte_positions.unsqueeze(1) # [B, P, L]
         
-        # Create LOCAL field contributions for each byte
-        for i in range(seq_len):
-            current_byte = byte_sequence[:, i]  # [B]
-            current_position = byte_positions[:, i]  # [B]
-            current_amplitude = modulated_amplitudes[:, i]  # [B, D]
-            
-            # Get locality parameters for this byte type
-            locality_params = self.locality_shapes[current_byte]  # [B, 4]
-            
-            # Multi-scale local basis functions
-            total_contribution = torch.zeros(batch_size, n_positions, self.semantic_dim,
-                                           device=byte_sequence.device)
-            
-            for scale_idx, base_width in enumerate(self.multiscale_widths):
-                # Position offset and width for this scale
-                position_offset = locality_params[:, 0] * 0.05  # Small learnable offset
-                width = torch.abs(locality_params[:, 1]) * base_width + 1e-5
-                amplitude_scale = torch.sigmoid(locality_params[:, 2])
-                phase = locality_params[:, 3] * np.pi
-                
-                # Actual byte position with offset
-                center_position = current_position + position_offset
-                
-                # Distance from center
-                x_diff = continuous_positions - center_position.unsqueeze(1)  # [B, P]
-                
-                # Local basis function (Gaussian wave packet)
-                local_basis = torch.exp(-0.5 * (x_diff / width.unsqueeze(1))**2)
-                
-                # Add phase modulation for richer representation
-                phase_modulation = torch.cos(phase.unsqueeze(1) + 
-                                           2 * np.pi * x_diff / width.unsqueeze(1))
-                local_basis = local_basis * phase_modulation
-                
-                # Scale by amplitude and weight
-                local_basis = local_basis * amplitude_scale.unsqueeze(1) * self.scale_weights[scale_idx]
-                
-                # Create field contribution
-                contribution = torch.einsum('bp,bd->bpd', local_basis, current_amplitude)
-                total_contribution += contribution * self.scale_weights[scale_idx]
-            
-            # Add to total field
-            semantic_field += total_contribution
+        locality_params = self.locality_shapes[byte_sequence] # [B, L, 3]
+        widths = torch.abs(locality_params[:, :, 1]) * 0.02 + 1e-5 # [B, L]
+        amplitudes = torch.sigmoid(locality_params[:, :, 2]) # [B, L]
+        
+        # Gaussian basis functions for locality
+        local_basis = torch.exp(-0.5 * (x_diff / widths.unsqueeze(1))**2) # [B, P, L]
+        local_basis = local_basis * amplitudes.unsqueeze(1) # [B, P, L]
+        
+        # Contract basis with amplitudes to form the field
+        # einsum: (batch, pos, len) * (batch, len, comps, dim) -> (batch, pos, comps, dim)
+        semantic_field = torch.einsum('bpl,blcd->bpcd', local_basis, byte_amplitudes)
         
         return semantic_field
 
+# ============================================================================
+# 2. SFT v2: GAUGE FIELD GENERATOR (THE SYNTAX ENGINE)
+# ============================================================================
 
-class InteractiveFieldEvolution(nn.Module):
+class GaugeFieldGenerator_v2(nn.Module):
     """
-    TRUE field dynamics with spatial coupling via Laplacian
-    Information propagates through the field creating genuine wave dynamics
+    Generates the Gauge Connection Field A(x).
+    This field represents the learned syntactic rules and applies role-binding.
+    Output: A field of matrices, shape [Batch, Position, N_Components, N_Components]
     """
-    
-    def __init__(self, semantic_dim=256, kinetic_strength=0.1, potential_strength=0.05):
+    def __init__(self, field_resolution=128, n_components=2):
+        super().__init__()
+        self.field_resolution = field_resolution
+        self.n_components = n_components
+        
+        # A convolutional network to process the byte sequence and infer syntax
+        self.syntax_encoder = nn.Sequential(
+            nn.Conv1d(256, 128, kernel_size=7, padding=3),
+            nn.GELU(),
+            nn.Conv1d(128, 64, kernel_size=5, padding=2),
+            nn.GELU(),
+            # Output channels for each element of the Nc x Nc matrix
+            nn.Conv1d(64, n_components * n_components, kernel_size=3, padding=1)
+        )
+
+    def forward(self, byte_sequence):
+        """
+        Generate the gauge field A(x) from the raw byte sequence.
+        """
+        batch_size, seq_len = byte_sequence.shape
+        byte_onehot = F.one_hot(byte_sequence, 256).float().transpose(1, 2) # [B, 256, L]
+        
+        # Encode syntax from the sequence
+        syntax_encoding = self.syntax_encoder(byte_onehot) # [B, Nc*Nc, L]
+        
+        # Upsample from sequence length to field resolution to create a continuous field
+        gauge_field_flat = F.interpolate(
+            syntax_encoding, 
+            size=self.field_resolution, 
+            mode='linear', 
+            align_corners=False
+        ) # [B, Nc*Nc, P]
+        
+        # Reshape into a field of matrices
+        gauge_field = gauge_field_flat.permute(0, 2, 1).view(
+            batch_size, self.field_resolution, self.n_components, self.n_components
+        ) # [B, P, Nc, Nc]
+        
+        # Optional: Make the matrices skew-Hermitian (for unitary evolution)
+        # This enforces certain conservation laws. A_dagger = -A
+        gauge_field = (gauge_field - gauge_field.transpose(-1, -2).conj()) / 2.0
+
+        return gauge_field
+
+# ============================================================================
+# 3. SFT v2: GAUGE FIELD EVOLUTION (THE NEW DYNAMICS)
+# ============================================================================
+
+class GaugeFieldEvolution_v2(nn.Module):
+    """
+    Evolves the semantic field using a Covariant Derivative.
+    This combines spatial propagation with syntactic binding via the gauge field.
+    Dynamics: i∂Ψ/∂t = DΨ, where D = (∂ - igA)
+    """
+    def __init__(self, semantic_dim=128, n_components=2, kinetic_strength=0.1):
         super().__init__()
         self.semantic_dim = semantic_dim
+        self.n_components = n_components
         
-        # Potential energy (local interactions)
-        self.potential_hamiltonian = nn.Parameter(torch.randn(semantic_dim, semantic_dim) * potential_strength)
-        
-        # Kinetic energy coefficient (controls coupling strength)
-        self.kinetic_coeff = nn.Parameter(torch.ones(1) * kinetic_strength)
-        
-        # Nonlinear potential for context-dependent evolution
-        self.nonlinear_potential = nn.Sequential(
-            nn.Linear(semantic_dim, semantic_dim // 2),
-            nn.Tanh(),
-            nn.Linear(semantic_dim // 2, semantic_dim)
-        )
-        
-        # Learnable evolution time
+        # Learnable coupling constant 'g' for the gauge interaction strength
+        self.gauge_coupling_strength = nn.Parameter(torch.ones(1) * 0.5)
+        self.kinetic_strength = nn.Parameter(torch.ones(1) * kinetic_strength)
         self.evolution_time = nn.Parameter(torch.ones(1) * 0.1)
-        
-    def compute_field_laplacian(self, psi):
-        """
-        Compute ∇²Ψ with proper boundary handling
-        This creates the spatial coupling that enables true field dynamics
-        """
-        batch_size, n_positions, semantic_dim = psi.shape
-        
-        # Use circular boundary conditions for natural field dynamics
+
+    def compute_laplacian(self, psi):
+        """ Computes ∇²Ψ on the multi-component field. """
+        # psi shape: [B, P, Nc, D] (complex)
         psi_left = torch.roll(psi, shifts=1, dims=1)
         psi_right = torch.roll(psi, shifts=-1, dims=1)
-        
-        # Second-order finite difference: ∇²Ψ ≈ (Ψ(x+h) - 2Ψ(x) + Ψ(x-h))/h²
-        dx = 1.0 / n_positions
+        dx = 1.0 / psi.shape[1]
         laplacian = (psi_right - 2 * psi + psi_left) / (dx**2)
-        
         return laplacian
-    
-    def forward(self, semantic_field):
+
+    def forward(self, semantic_field, gauge_field):
         """
-        Evolve semantic field with true Schrödinger dynamics
-        iℏ ∂Ψ/∂t = (-ℏ²/2m ∇² + V)Ψ
+        Evolve the field using the covariant derivative.
         """
-        batch_size, n_positions, semantic_dim = semantic_field.shape
-        
-        # Convert to complex field for evolution
+        # Convert semantic field to complex
         psi = torch.complex(semantic_field, torch.zeros_like(semantic_field))
-        
-        # Make Hamiltonian Hermitian
-        H_potential_real = (self.potential_hamiltonian + self.potential_hamiltonian.T) / 2
-        H_potential = torch.complex(H_potential_real, torch.zeros_like(H_potential_real)) 
-               
         dt = self.evolution_time
+
+        # 1. Kinetic Term (∂Ψ): Spatial propagation
+        # This is our Laplacian, representing how fields spread and interfere locally.
+        kinetic_term = -self.kinetic_strength * self.compute_laplacian(psi)
         
-        # 1. KINETIC ENERGY: Spatial coupling via Laplacian
-        laplacian_psi = self.compute_field_laplacian(psi)
-        kinetic_term = -self.kinetic_coeff * laplacian_psi  # -ℏ²/2m ∇²Ψ
+        # 2. Gauge Term (gAΨ): Syntactic binding
+        # This is the core of the new theory. The gauge field 'A' "rotates"
+        # the component spinors, effectively binding roles to the concepts.
+        g = self.gauge_coupling_strength
+
+        gauge_field = torch.complex(gauge_field, torch.zeros_like(gauge_field))
+        # einsum: (b,p,i,j) * (b,p,j,d) -> (b,p,i,d)
+        # where i,j are component indices
+        gauge_term = -1j * g * torch.einsum('bpij,bpjd->bpid', gauge_field, psi)
+
+        # 3. Covariant Derivative Action (DΨ = ∂Ψ - igAΨ)
+        # We combine both effects. The evolution is driven by both local
+        # spreading and syntactic role-binding transformations.
+        covariant_derivative_action = kinetic_term + gauge_term
         
-        # 2. LINEAR POTENTIAL: Standard Hamiltonian action
-        linear_potential = torch.einsum('ij,bpj->bpi', H_potential, psi)
+        # 4. Time Evolution Step
+        evolved_psi = psi + dt * covariant_derivative_action
         
-        # 3. NONLINEAR POTENTIAL: Context-dependent interactions
-        field_magnitude = torch.abs(psi)
-        nonlinear_term = self.nonlinear_potential(field_magnitude)
-        nonlinear_potential = torch.complex(nonlinear_term, torch.zeros_like(nonlinear_term)) * psi
-        
-        # 4. TOTAL HAMILTONIAN ACTION
-        H_psi = kinetic_term + linear_potential + 0.1 * nonlinear_potential
-        
-        # 5. TIME EVOLUTION (first-order approximation)
-        evolved_psi = psi - 1j * dt * H_psi
-        
-        # 6. NORMALIZATION (preserve total semantic content)
-        norm = torch.sqrt(torch.sum(torch.abs(evolved_psi)**2, dim=(1, 2), keepdim=True))
+        # 5. Normalization (optional but good for stability)
+        norm = torch.sqrt(torch.sum(torch.abs(evolved_psi)**2, dim=(-2, -1), keepdim=True))
         evolved_psi = evolved_psi / (norm + 1e-8)
         
         return evolved_psi.real
+
+
+# --- For Reference: Old SFT v1 Components ---
+# class LocalSemanticField(nn.Module): ...
+# class InteractiveFieldEvolution(nn.Module): ...
+# class SemanticFieldInterference(nn.Module): ...

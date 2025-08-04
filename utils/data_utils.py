@@ -261,3 +261,106 @@ def create_svo_compositional_dataset():
     print(f"  Basis concepts: {len(basis_texts)}")
     
     return compositional_dataset
+
+class SFTDataset(Dataset):
+    """
+    Flexible dataset for SFT experiments
+    """
+    def __init__(self, texts, labels, max_length=64):
+        self.texts = texts
+        self.labels = labels
+        self.max_length = max_length
+        
+    def __len__(self):
+        return len(self.texts)
+    
+    def __getitem__(self, idx):
+        text = self.texts[idx]
+        label = self.labels[idx]
+        
+        byte_seq = text.encode('utf-8', errors='ignore')[:self.max_length]
+        padded = np.zeros(self.max_length, dtype=np.int64)
+        padded[:len(byte_seq)] = list(byte_seq)
+        
+        return {
+            'bytes': torch.tensor(padded, dtype=torch.long),
+            'label': torch.tensor(label, dtype=torch.long),
+            'text': text
+        }
+
+
+def create_svo_compositional_dataset():
+    """
+    Creates a dataset to test Subject-Verb-Object role understanding.
+    (This is the new function for the SVO experiment)
+    """
+    print("Creating SVO compositional dataset...")
+
+    agents = ["The dog", "The cat", "The boy", "The girl"]
+    verbs = ["chased", "threw", "saw", "pushed"]
+    objects = ["the ball", "the stick", "the toy", "the box"]
+
+    # Training Data (Agent OR Action/Object)
+    train_texts, train_labels = [], []
+    for agent in agents:
+        train_texts.extend([f"{agent} runs", f"{agent} sleeps"])
+    train_labels.extend([0] * len(train_texts))
+
+    action_texts_start_index = len(train_texts)
+    for verb in verbs:
+        for obj in objects:
+            if (verbs.index(verb) + objects.index(obj)) % 2 == 0:
+                train_texts.append(f"{verb} {obj}")
+    train_labels.extend([1] * (len(train_texts) - action_texts_start_index))
+
+    # Test Data (Unseen SVO compositions)
+    test_texts = [
+        "The dog chased the ball", "The cat threw the stick",
+        "The girl saw the toy", "The boy pushed the box",
+        "The ball chased the dog", "The stick threw the cat",
+    ]
+
+    # Basis Data (For comparing learned concepts)
+    basis_texts, basis_concepts = [], []
+    for concept in agents + verbs + objects:
+        basis_texts.append(f"Concept is {concept}")
+        basis_concepts.append(concept)
+        
+    compositional_dataset = {
+        "train": {"texts": train_texts, "labels": train_labels},
+        "test": {"texts": test_texts, "labels": [0] * len(test_texts)},
+        "basis": {"texts": basis_texts, "concepts": basis_concepts}
+    }
+
+    print(f"  Training samples: {len(train_texts)}")
+    print(f"  Test samples: {len(test_texts)}")
+    print(f"  Basis concepts: {len(basis_concepts)}")
+    
+    return compositional_dataset
+
+
+def create_data_loaders(texts, labels, batch_size=8, test_split=0.2, max_length=64):
+    """
+    Create train/test data loaders from texts and labels
+    """
+    split_idx = int((1 - test_split) * len(texts))
+    train_texts, test_texts = texts[:split_idx], texts[split_idx:]
+    train_labels, test_labels = labels[:split_idx], labels[split_idx:]
+    
+    train_dataset = SFTDataset(train_texts, train_labels, max_length)
+    test_dataset = SFTDataset(test_texts, test_labels, max_length)
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    
+    return train_loader, test_loader
+
+
+def text_to_tensor(text, max_length=64, device='cpu'):
+    """
+    Convert text to byte tensor for model input
+    """
+    byte_seq = text.encode('utf-8')[:max_length]
+    padded = np.zeros(max_length, dtype=np.int64)
+    padded[:len(byte_seq)] = list(byte_seq)
+    return torch.tensor(padded, dtype=torch.long).unsqueeze(0).to(device)

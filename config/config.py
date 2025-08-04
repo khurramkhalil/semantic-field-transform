@@ -131,12 +131,12 @@ class ExperimentConfigs:
         """Configuration for the Subject-Verb-Object composition test."""
         config = SFTConfig()
         config.SEMANTIC_DIM = 64
-        config.FIELD_RESOLUTION = 64
-        config.N_LAYERS = 3  # A bit more depth for the complex relations
-        config.EPOCHS = 30  # More epochs to learn the roles
+        config.FIELD_RESOLUTION = 64 # Let's keep resolution and max_length consistent
+        config.MAX_LENGTH = 64       # Add this line
+        config.N_LAYERS = 3
+        config.EPOCHS = 30
         config.BATCH_SIZE = 4
         config.LEARNING_RATE = 1.5e-3
-        # Classification task: Agent (0) vs. Action/Object (1)
         config.N_CLASSES = 2
         return config
 

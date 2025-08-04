@@ -159,56 +159,77 @@
     
 #     print("\n✅ Experiment completed successfully!")
 
+# #!/usr/bin/env python3
+# """
+# Entry point for running SFT experiments.
+# """
+# import argparse
+# from config.config import ExperimentConfigs
+# from experiments.experiment_runner import SFTExperiment
+
+# def main():
+#     parser = argparse.ArgumentParser(description="Run Semantic Field Transform Experiments")
+#     parser.add_argument(
+#         '--experiment', 
+#         type=str, 
+#         default='svo', 
+#         choices=['quick', 'full', 'composition', 'svo'],
+#         help='The type of experiment to run.'
+#     )
+#     args = parser.parse_args()
+
+#     if args.experiment == 'composition':
+#         config = ExperimentConfigs.semantic_composition()
+#         experiment = SFTExperiment(
+#             semantic_dim=config.SEMANTIC_DIM, field_resolution=config.FIELD_RESOLUTION,
+#             n_layers=config.N_LAYERS, n_classes=config.N_CLASSES
+#         )
+#         experiment.run_composition_experiment(epochs=config.EPOCHS, lr=config.LEARNING_RATE)
+
+#     elif args.experiment == 'svo':
+#         config = ExperimentConfigs.semantic_svo_test()
+#         experiment = SFTExperiment(
+#             semantic_dim=config.SEMANTIC_DIM, field_resolution=config.FIELD_RESOLUTION,
+#             n_layers=config.N_LAYERS, n_classes=config.N_CLASSES
+#         )
+#         experiment.run_svo_experiment(epochs=config.EPOCHS, lr=config.LEARNING_RATE)
+
+#     elif args.experiment == 'quick':
+#         config = ExperimentConfigs.quick_test()
+#         experiment = SFTExperiment(
+#             semantic_dim=config.SEMANTIC_DIM, field_resolution=config.FIELD_RESOLUTION,
+#             n_layers=config.N_LAYERS
+#         )
+#         experiment.run_complete_experiment(epochs=config.EPOCHS, batch_size=config.BATCH_SIZE)
+        
+#     elif args.experiment == 'full':
+#         config = ExperimentConfigs.full_experiment()
+#         experiment = SFTExperiment(
+#             semantic_dim=config.SEMANTIC_DIM, field_resolution=config.FIELD_RESOLUTION,
+#             n_layers=config.N_LAYERS
+#         )
+#         experiment.run_complete_experiment(epochs=config.EPOCHS, batch_size=config.BATCH_SIZE)
+
+# if __name__ == "__main__":
+#     main()
+
 #!/usr/bin/env python3
 """
-Entry point for running SFT experiments.
+Main entry point for running the SFT v2 experiment.
 """
-import argparse
 from config.config import ExperimentConfigs
-from experiments.experiment_runner import SFTExperiment
+from experiments.experiment_runner import SFT_v2_Experiment
 
 def main():
-    parser = argparse.ArgumentParser(description="Run Semantic Field Transform Experiments")
-    parser.add_argument(
-        '--experiment', 
-        type=str, 
-        default='svo', 
-        choices=['quick', 'full', 'composition', 'svo'],
-        help='The type of experiment to run.'
-    )
-    args = parser.parse_args()
-
-    if args.experiment == 'composition':
-        config = ExperimentConfigs.semantic_composition()
-        experiment = SFTExperiment(
-            semantic_dim=config.SEMANTIC_DIM, field_resolution=config.FIELD_RESOLUTION,
-            n_layers=config.N_LAYERS, n_classes=config.N_CLASSES
-        )
-        experiment.run_composition_experiment(epochs=config.EPOCHS, lr=config.LEARNING_RATE)
-
-    elif args.experiment == 'svo':
-        config = ExperimentConfigs.semantic_svo_test()
-        experiment = SFTExperiment(
-            semantic_dim=config.SEMANTIC_DIM, field_resolution=config.FIELD_RESOLUTION,
-            n_layers=config.N_LAYERS, n_classes=config.N_CLASSES
-        )
-        experiment.run_svo_experiment(epochs=config.EPOCHS, lr=config.LEARNING_RATE)
-
-    elif args.experiment == 'quick':
-        config = ExperimentConfigs.quick_test()
-        experiment = SFTExperiment(
-            semantic_dim=config.SEMANTIC_DIM, field_resolution=config.FIELD_RESOLUTION,
-            n_layers=config.N_LAYERS
-        )
-        experiment.run_complete_experiment(epochs=config.EPOCHS, batch_size=config.BATCH_SIZE)
-        
-    elif args.experiment == 'full':
-        config = ExperimentConfigs.full_experiment()
-        experiment = SFTExperiment(
-            semantic_dim=config.SEMANTIC_DIM, field_resolution=config.FIELD_RESOLUTION,
-            n_layers=config.N_LAYERS
-        )
-        experiment.run_complete_experiment(epochs=config.EPOCHS, batch_size=config.BATCH_SIZE)
+    """
+    Selects the configuration and runs the SFT v2 experiment.
+    """
+    # Get config for the SVO test
+    config = ExperimentConfigs.semantic_svo_test()
+    
+    # Initialize and run the experiment
+    experiment = SFT_v2_Experiment(config)
+    experiment.run()
 
 if __name__ == "__main__":
     main()
