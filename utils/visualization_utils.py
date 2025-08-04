@@ -256,3 +256,27 @@ def create_visualization_suite(model, text_samples, training_history=None, devic
     plot_field_comparison(model, comparison_pairs, device, 'field_comparison.png')
     
     print("✓ Visualization suite complete!")
+
+def plot_similarity_heatmap(similarity_matrix, labels, title="Semantic Composition Similarity", save_path='semantic_composition.png'):
+    """
+    Plots a heatmap of the cosine similarity matrix.
+    """
+    print("\n🎨 VISUALIZING SEMANTIC SIMILARITY")
+    print("-" * 60)
+    
+    fig, ax = plt.subplots(figsize=(10, 8))
+    sns.heatmap(
+        similarity_matrix,
+        annot=True,
+        fmt=".2f",
+        cmap="viridis",
+        xticklabels=labels,
+        yticklabels=labels,
+        ax=ax
+    )
+    ax.set_title(title, fontsize=16, fontweight='bold')
+    plt.xticks(rotation=45, ha="right")
+    plt.yticks(rotation=0)
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300)
+    plt.show()

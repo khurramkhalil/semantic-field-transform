@@ -126,3 +126,138 @@ def text_to_tensor(text, max_length=64, device='cpu'):
     padded = np.zeros(max_length, dtype=np.int64)
     padded[:len(byte_seq)] = list(byte_seq)
     return torch.tensor(padded, dtype=torch.long).unsqueeze(0).to(device)
+
+def create_compositional_dataset():
+    """
+    Creates a highly controlled dataset to test for semantic composition.
+
+    - Training set: Contains sentences about color OR shape, but never both.
+    - Test set: Contains sentences combining color AND shape.
+    - Basis set: Contains sentences representing "pure" concepts.
+
+    Returns:
+        dict: A dictionary containing 'train', 'test', and 'basis' sets.
+    """
+    print("Creating compositional dataset...")
+
+    # Define concepts
+    colors = {"red": ["ball", "car"], "blue": ["block", "pyramid"]}
+    shapes = {"sphere": ["round thing"], "cube": ["square box"]}
+    
+    # --- Training Data (Color OR Shape) ---
+    train_texts = []
+    train_labels = []
+
+    # Color sentences (label 0)
+    for color, objects in colors.items():
+        for obj in objects:
+            train_texts.append(f"The {obj} is {color}")
+            train_texts.append(f"I see a {color} {obj}")
+    train_labels.extend([0] * len(train_texts))
+
+    # Shape sentences (label 1)
+    shape_texts_start_index = len(train_texts)
+    for shape, objects in shapes.items():
+        for obj in objects:
+            train_texts.append(f"Look at the {obj}")
+            train_texts.append(f"It is a {shape}")
+    train_labels.extend([1] * (len(train_texts) - shape_texts_start_index))
+
+    # --- Test Data (Sentences NEVER seen in training) ---
+    test_texts = []
+    for shape in shapes.keys():
+        for color in colors.keys():
+            test_texts.append(f"The {shape} is {color}")
+            test_texts.append(f"A {color} {shape}")
+
+    # --- Basis Data (For comparing learned concepts) ---
+    basis_texts = []
+    basis_concepts = []
+
+    for color in colors.keys():
+        basis_texts.append(f"The concept is {color}")
+        basis_concepts.append(color)
+
+    for shape in shapes.keys():
+        basis_texts.append(f"The concept is a {shape}")
+        basis_concepts.append(shape)
+        
+    compositional_dataset = {
+        "train": {"texts": train_texts, "labels": train_labels},
+        "test": {"texts": test_texts, "labels": [0] * len(test_texts)},  # Labels don't matter for test
+        "basis": {"texts": basis_texts, "concepts": basis_concepts}
+    }
+
+    print(f"  Training samples: {len(train_texts)}")
+    print(f"  Test samples (unseen compositions): {len(test_texts)}")
+    print(f"  Basis concepts: {len(basis_texts)}")
+    
+    return compositional_dataset
+
+def create_svo_compositional_dataset():
+    """
+    Creates a dataset to test Subject-Verb-Object role understanding.
+
+    - Training set: Contains sentences about agents OR actions on objects.
+    - Test set: Contains full SVO sentences, including role-swapped versions.
+    - Basis set: Contains sentences representing "pure" concepts for analysis.
+
+    Returns:
+        dict: A dictionary containing 'train', 'test', and 'basis' sets.
+    """
+    print("Creating SVO compositional dataset...")
+
+    # Define concepts
+    agents = ["The dog", "The cat", "The boy", "The girl"]
+    verbs = ["chased", "threw", "saw", "pushed"]
+    objects = ["the ball", "the stick", "the toy", "the box"]
+
+    # --- Training Data (Agent OR Action/Object) ---
+    train_texts = []
+    train_labels = []
+
+    # Agent sentences (label 0)
+    for agent in agents:
+        train_texts.append(f"{agent} runs")
+        train_texts.append(f"{agent} sleeps")
+    train_labels.extend([0] * len(train_texts))
+
+    # Action/Object sentences (label 1)
+    action_texts_start_index = len(train_texts)
+    for verb in verbs:
+        for obj in objects:
+            # Only add a subset to avoid too large a training set
+            if (verbs.index(verb) + objects.index(obj)) % 2 == 0:
+                train_texts.append(f"{verb} {obj}")
+    train_labels.extend([1] * (len(train_texts) - action_texts_start_index))
+
+    # --- Test Data (Unseen SVO compositions) ---
+    test_texts = [
+        "The dog chased the ball",
+        "The cat threw the stick",
+        "The girl saw the toy",
+        "The boy pushed the box",
+        # Crucial inverted test cases
+        "The ball chased the dog",
+        "The stick threw the cat",
+    ]
+
+    # --- Basis Data (For comparing learned concepts) ---
+    basis_texts = []
+    basis_concepts = []
+    
+    for concept in agents + verbs + objects:
+        basis_texts.append(f"Concept is {concept}")
+        basis_concepts.append(concept)
+        
+    compositional_dataset = {
+        "train": {"texts": train_texts, "labels": train_labels},
+        "test": {"texts": test_texts, "labels": [0] * len(test_texts)},
+        "basis": {"texts": basis_texts, "concepts": basis_concepts}
+    }
+
+    print(f"  Training samples: {len(train_texts)}")
+    print(f"  Test samples (unseen compositions): {len(test_texts)}")
+    print(f"  Basis concepts: {len(basis_texts)}")
+    
+    return compositional_dataset

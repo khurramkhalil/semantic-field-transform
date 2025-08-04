@@ -112,6 +112,34 @@ class ExperimentConfigs:
         config.EPOCHS = 10
         return config
 
+    @staticmethod
+    def semantic_composition():
+        """Configuration for the semantic composition test"""
+        config = SFTConfig()
+        config.SEMANTIC_DIM = 64  # Smaller is fine for this conceptual test
+        config.FIELD_RESOLUTION = 64
+        config.N_LAYERS = 2
+        config.EPOCHS = 20  # Needs enough time to learn the concepts
+        config.BATCH_SIZE = 4
+        config.LEARNING_RATE = 2e-3
+        # The number of classes is determined by the dataset (color vs. shape)
+        config.N_CLASSES = 2
+        return config
+
+    @staticmethod
+    def semantic_svo_test():
+        """Configuration for the Subject-Verb-Object composition test."""
+        config = SFTConfig()
+        config.SEMANTIC_DIM = 64
+        config.FIELD_RESOLUTION = 64
+        config.N_LAYERS = 3  # A bit more depth for the complex relations
+        config.EPOCHS = 30  # More epochs to learn the roles
+        config.BATCH_SIZE = 4
+        config.LEARNING_RATE = 1.5e-3
+        # Classification task: Agent (0) vs. Action/Object (1)
+        config.N_CLASSES = 2
+        return config
+
 
 # Research-specific configurations
 class ResearchConfigs:

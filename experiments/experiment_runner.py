@@ -266,6 +266,88 @@ class SFTExperiment:
         print("scientifically sound Semantic Field Transform!")
         print("=" * 100)
 
+    def run_composition_experiment(self, epochs=20, lr=2e-3):
+        """
+        Run the dedicated semantic composition experiment.
+        """
+        from utils.data_utils import create_compositional_dataset
+        from utils.visualization_utils import plot_similarity_heatmap
+        from utils.validation_utils import run_semantic_composition_test
+
+        print("\n🔬 RUNNING SEMANTIC COMPOSITION EXPERIMENT")
+        print("=" * 80)
+        
+        # 1. Create the special dataset
+        compositional_dataset = create_compositional_dataset()
+        train_data = compositional_dataset['train']
+        
+        # Setup data loaders for training
+        self.train_loader, _ = create_data_loaders(
+            train_data['texts'], train_data['labels'], batch_size=4, test_split=0.01
+        )
+        
+        # 2. Train the model on the non-compositional data
+        print("\n🚀 TRAINING ON NON-COMPOSITIONAL DATA")
+        print("-" * 40)
+        self.trainer = SFTTrainer(self.model, device=self.device, lr=lr)
+        self.training_history = self.trainer.train(self.train_loader, epochs=epochs, verbose=False)
+        print("Training complete.")
+
+        # 3. Run the semantic composition validation
+        similarity_matrix, labels = run_semantic_composition_test(
+            self.model, compositional_dataset, device=self.device
+        )
+        
+        # 4. Visualize the results
+        plot_similarity_heatmap(similarity_matrix, labels)
+        
+        print("\n✅ Semantic Composition Experiment Finished.")
+        return similarity_matrix, labels
+
+    def run_svo_experiment(self, epochs=30, lr=1.5e-3):
+        """
+        Run the dedicated Subject-Verb-Object semantic role experiment.
+        """
+        from utils.data_utils import create_svo_compositional_dataset
+        from utils.visualization_utils import plot_similarity_heatmap
+        from utils.validation_utils import run_svo_composition_test
+
+        print("\n🔬 RUNNING SVO COMPOSITION EXPERIMENT")
+        print("=" * 80)
+        
+        # 1. Create the special SVO dataset
+        svo_dataset = create_svo_compositional_dataset()
+        train_data = svo_dataset['train']
+        
+        self.setup_data(
+            custom_texts=train_data['texts'], 
+            custom_labels=train_data['labels'], 
+            batch_size=4, 
+            test_split=0.01
+        )
+        
+        # 2. Train the model to distinguish agents from actions
+        print("\n🚀 TRAINING ON AGENT vs. ACTION/OBJECT DATA")
+        print("-" * 40)
+        self.trainer = SFTTrainer(self.model, device=self.device, lr=lr)
+        self.training_history = self.trainer.train(self.train_loader, epochs=epochs, verbose=False)
+        print("Training complete.")
+
+        # 3. Run the SVO semantic role validation
+        similarity_matrix, labels = run_svo_composition_test(
+            self.model, svo_dataset, device=self.device
+        )
+        
+        # 4. Visualize the results
+        plot_similarity_heatmap(
+            similarity_matrix, 
+            labels, 
+            title="SVO Semantic Role Similarity"
+        )
+        
+        print("\n✅ SVO Composition Experiment Finished.")
+        return similarity_matrix, labels
+
 
 def quick_experiment(semantic_dim=64, field_resolution=64, epochs=5):
     """

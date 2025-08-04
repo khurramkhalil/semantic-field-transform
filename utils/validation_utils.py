@@ -203,3 +203,149 @@ def model_summary(model):
         'field_resolution': model.field_resolution,
         'n_layers': model.n_layers
     }
+
+import torch.nn.functional as F
+
+def run_semantic_composition_test(model, compositional_dataset, device='cpu'):
+    """
+    Tests the model's ability to represent unseen compositional concepts.
+    This is the core validation for true semantic understanding.
+    """
+    print("\n🔬 VALIDATING SEMANTIC COMPOSITION")
+    print("=" * 80)
+    
+    model.eval()
+    
+    basis_texts = compositional_dataset['basis']['texts']
+    basis_concepts = compositional_dataset['basis']['concepts']
+    test_texts = compositional_dataset['test']['texts']
+    
+    # Combine all texts to get their field representations in one go
+    all_texts = basis_texts + test_texts
+    all_labels = basis_concepts + test_texts
+
+    field_vectors = {}
+
+    with torch.no_grad():
+        for text, label in zip(all_texts, all_labels):
+            byte_tensor = text_to_tensor(text, device=device)
+            
+            # Get the final evolved field representation
+            _ , evolved_field = model(byte_tensor) # We only need the field
+            
+            # Pool the field to get a single vector representation for the sentence
+            # We use mean pooling here for simplicity
+            pooled_vector = evolved_field.mean(dim=1).squeeze(0) # [D]
+            field_vectors[label] = F.normalize(pooled_vector, p=2, dim=0)
+
+    # Calculate the cosine similarity matrix
+    num_vectors = len(all_labels)
+    similarity_matrix = torch.zeros(num_vectors, num_vectors)
+    
+    for i in range(num_vectors):
+        for j in range(num_vectors):
+            vec_i = field_vectors[all_labels[i]]
+            vec_j = field_vectors[all_labels[j]]
+            similarity = torch.dot(vec_i, vec_j).item()
+            similarity_matrix[i, j] = similarity
+            
+    # --- Hypothesis Testing ---
+    print("\nHYPOTHESIS TEST: Does Ψ('red sphere') ≈ Ψ('red') + Ψ('sphere')?")
+    print("-" * 60)
+    
+    # Example: "The sphere is red"
+    test_concept = "The sphere is red"
+    sim_with_red = similarity_matrix[len(basis_texts), basis_concepts.index('red')]
+    sim_with_sphere = similarity_matrix[len(basis_texts), basis_concepts.index('sphere')]
+    sim_with_blue = similarity_matrix[len(basis_texts), basis_concepts.index('blue')]
+    sim_with_cube = similarity_matrix[len(basis_texts), basis_concepts.index('cube')]
+
+    print(f"Similarity between '{test_concept}' and 'red': {sim_with_red:.3f}")
+    print(f"Similarity between '{test_concept}' and 'sphere': {sim_with_sphere:.3f}")
+    print(f"Similarity between '{test_concept}' and 'blue': {sim_with_blue:.3f}")
+    print(f"Similarity between '{test_concept}' and 'cube': {sim_with_cube:.3f}")
+
+    # Check if the correct concepts have higher similarity
+    composition_test_passed = (sim_with_red > sim_with_blue) and (sim_with_sphere > sim_with_cube)
+    
+    print(f"\nCompositionality Check: {'✓ PASS' if composition_test_passed else '✗ FAIL'}")
+    if not composition_test_passed:
+        print("  Warning: Model may not be composing concepts as expected.")
+        
+    return similarity_matrix.cpu().numpy(), all_labels
+
+def run_svo_composition_test(model, compositional_dataset, device='cpu'):
+    """
+    Tests the model's understanding of semantic roles (SVO).
+    This is a more advanced test of true semantic composition.
+    """
+    print("\n🔬 VALIDATING SVO SEMANTIC ROLE UNDERSTANDING")
+    print("=" * 80)
+    
+    model.eval()
+    
+    basis_texts = compositional_dataset['basis']['texts']
+    basis_concepts = compositional_dataset['basis']['concepts']
+    test_texts = compositional_dataset['test']['texts']
+    
+    # Combine all texts to get their field representations
+    all_texts = basis_texts + test_texts
+    all_labels = basis_concepts + test_texts
+
+    field_vectors = {}
+
+    with torch.no_grad():
+        for text, label in zip(all_texts, all_labels):
+            byte_tensor = text_to_tensor(text, device=device, max_length=32)
+            _ , evolved_field = model(byte_tensor)
+            pooled_vector = evolved_field.mean(dim=1).squeeze(0)
+            field_vectors[label] = F.normalize(pooled_vector, p=2, dim=0)
+
+    num_vectors = len(all_labels)
+    similarity_matrix = torch.zeros(num_vectors, num_vectors)
+    
+    for i in range(num_vectors):
+        for j in range(num_vectors):
+            vec_i = field_vectors[all_labels[i]]
+            vec_j = field_vectors[all_labels[j]]
+            similarity_matrix[i, j] = torch.dot(vec_i, vec_j).item()
+            
+    # --- HYPOTHESIS TESTING ---
+    print("\nPRIMARY HYPOTHESIS: Can the model distinguish semantic roles?")
+    print("-" * 60)
+    
+    normal_svo = "The dog chased the ball"
+    inverted_svo = "The ball chased the dog"
+    
+    sim_between_inversions = field_vectors[normal_svo] @ field_vectors[inverted_svo]
+    
+    print(f"Similarity between '{normal_svo}' and '{inverted_svo}': {sim_between_inversions:.3f}")
+    
+    role_test_passed = sim_between_inversions < 0.9  # Must not be seen as identical
+    
+    print(f"\nSemantic Role Distinction Test: {'✓ PASS' if role_test_passed else '✗ FAIL'}")
+    if not role_test_passed:
+        print("  CRITICAL FAILURE: Model does not distinguish subject from object.")
+    else:
+        print("  SUCCESS: Model represents sentences with different roles differently.")
+
+    # --- SECONDARY HYPOTHESIS: Compositionality ---
+    print("\n\nSECONDARY HYPOTHESIS: Is the SVO field composed of its parts?")
+    print("-" * 60)
+    sim_dog = field_vectors[normal_svo] @ field_vectors["The dog"]
+    sim_chased = field_vectors[normal_svo] @ field_vectors["chased"]
+    sim_ball = field_vectors[normal_svo] @ field_vectors["the ball"]
+    
+    # Compare with an unrelated concept
+    sim_cat = field_vectors[normal_svo] @ field_vectors["The cat"]
+
+    print(f"Similarity of '{normal_svo}' with 'The dog': {sim_dog:.3f}")
+    print(f"Similarity of '{normal_svo}' with 'chased': {sim_chased:.3f}")
+    print(f"Similarity of '{normal_svo}' with 'the ball': {sim_ball:.3f}")
+    print(f"Similarity of '{normal_svo}' with 'The cat' (control): {sim_cat:.3f}")
+    
+    composition_test_passed = (sim_dog > sim_cat) and (sim_chased > sim_cat)
+
+    print(f"\nComponent Composition Test: {'✓ PASS' if composition_test_passed else '✗ FAIL'}")
+        
+    return similarity_matrix.cpu().numpy(), all_labels
