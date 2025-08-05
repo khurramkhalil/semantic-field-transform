@@ -59,8 +59,12 @@ class SFT_Relational_Experiment:
         from utils.data_utils import create_svo_compositional_dataset
         svo_validation_dataset = create_svo_compositional_dataset()
         
+        # FIX: Pass the model's configured max_length to the validation function
         similarity_matrix, labels = run_svo_composition_test(
-            self.model, svo_validation_dataset, device=self.device
+            self.model, 
+            svo_validation_dataset, 
+            max_length=self.config.MAX_LENGTH, # Pass the config value
+            device=self.device
         )
         
         # 4. Visualize the results

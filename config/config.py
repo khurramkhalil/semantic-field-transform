@@ -155,6 +155,20 @@ class ExperimentConfigs:
         config.N_CLASSES = 2 
         return config
 
+    @staticmethod
+    def position_aware_svo():
+        """Final SVO experiment with position-aware components."""
+        config = SFTConfig()
+        config.SEMANTIC_DIM = 64
+        config.FIELD_RESOLUTION = 64
+        config.MAX_LENGTH = 64
+        config.N_LAYERS = 4
+        config.EPOCHS = 60 # Give it a bit more time to learn the harder task
+        config.BATCH_SIZE = 16 # We can use a larger batch size
+        config.LEARNING_RATE = 2e-3
+        config.N_CLASSES = 2
+        return config
+
 
 # Research-specific configurations
 class ResearchConfigs:

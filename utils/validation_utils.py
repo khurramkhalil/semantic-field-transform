@@ -350,7 +350,7 @@ def run_semantic_composition_test(model, compositional_dataset, device='cpu'):
         
 #     return similarity_matrix.cpu().numpy(), all_labels
 
-def run_svo_composition_test(model, compositional_dataset, device='cpu'):
+def run_svo_composition_test(model, compositional_dataset, max_length=64, device='cpu'):
     """
     Tests the SFT v2 model's understanding of semantic roles (SVO).
     This is a more advanced test of true semantic composition.
@@ -369,15 +369,15 @@ def run_svo_composition_test(model, compositional_dataset, device='cpu'):
 
     field_vectors = {}
 
-    # --- FIX APPLIED HERE ---
-    # Get max_length from the model's field constructor config, which is tied to its resolution
-    # This ensures consistency between byte_positions and continuous_positions
-    try:
-        # Accessing via the new model structure
-        max_length_for_validation = model.field_constructor.field_resolution
-    except AttributeError:
-        # Fallback for older model versions if needed, though not ideal
-        max_length_for_validation = 64
+    # # --- FIX APPLIED HERE ---
+    # # Get max_length from the model's field constructor config, which is tied to its resolution
+    # # This ensures consistency between byte_positions and continuous_positions
+    # try:
+    #     # Accessing via the new model structure
+    #     max_length_for_validation = model.field_constructor.field_resolution
+    # except AttributeError:
+    #     # Fallback for older model versions if needed, though not ideal
+    #     max_length_for_validation = 64
 
     with torch.no_grad():
         for text, label in zip(all_texts, all_labels):
@@ -385,7 +385,7 @@ def run_svo_composition_test(model, compositional_dataset, device='cpu'):
             byte_tensor = text_to_tensor(
                 text, 
                 device=device, 
-                max_length=max_length_for_validation # Use the correct length
+                max_length=max_length # Use the correct length
             )
             # --- END OF FIX ---
             
