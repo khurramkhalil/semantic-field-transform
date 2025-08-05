@@ -289,6 +289,114 @@ class SFTDataset(Dataset):
         }
 
 
+# Define a special byte value for the MASK token that is unlikely to appear in text
+MASK_TOKEN_ID = 254 
+
+def create_mlm_dataset():
+    """
+    Creates a dataset for the Masked Language Modeling (MLM) / relational task.
+    For each sentence, it generates multiple versions with different parts masked.
+    
+    Returns:
+        A list of training tuples: (masked_sentence, original_sentence)
+    """
+    print("Creating Masked Language Model (MLM) dataset...")
+
+    # Define concepts
+    agents = ["The dog", "The cat", "The boy", "The girl"]
+    verbs = ["chased", "threw", "saw", "pushed"]
+    objects = ["the ball", "the stick", "the toy", "the box"]
+
+    # Generate all possible SVO sentences
+    full_sentences = []
+    for agent in agents:
+        for verb in verbs:
+            for obj in objects:
+                full_sentences.append(f"{agent} {verb} {obj}")
+
+    training_pairs = []
+    for sentence in full_sentences:
+        parts = sentence.split()
+        agent, verb, obj = parts[0:2], [parts[2]], parts[3:5]
+        
+        # Re-join with spaces to handle multi-word concepts
+        agent_str = " ".join(agent)
+        verb_str = " ".join(verb)
+        obj_str = " ".join(obj)
+
+        # 1. Mask the object
+        masked_obj_sent = f"{agent_str} {verb_str} [MASK]"
+        training_pairs.append((masked_obj_sent, sentence))
+        
+        # 2. Mask the verb
+        masked_verb_sent = f"{agent_str} [MASK] {obj_str}"
+        training_pairs.append((masked_verb_sent, sentence))
+
+        # 3. Mask the agent
+        masked_agent_sent = f"[MASK] {verb_str} {obj_str}"
+        training_pairs.append((masked_agent_sent, sentence))
+
+    print(f"  Generated {len(full_sentences)} base sentences.")
+    print(f"  Created {len(training_pairs)} masked training pairs.")
+    
+    return training_pairs
+
+
+class SFT_MLM_Dataset(Dataset):
+    """
+    Dataset specifically for the Masked Language Modeling task.
+    Returns a pair: the masked input and the original target.
+    """
+    def __init__(self, training_pairs, max_length=64):
+        self.training_pairs = training_pairs
+        self.max_length = max_length
+        self.mask_token_str = "[MASK]"
+
+    def __len__(self):
+        return len(self.training_pairs)
+
+    def _sentence_to_tensor(self, sentence, mask_positions=False):
+        """Helper to convert a sentence string to a byte tensor and find mask positions."""
+        # Replace [MASK] string with a placeholder before encoding
+        # We find its position first, then replace
+        mask_indices = []
+        if mask_positions:
+            start_index = sentence.find(self.mask_token_str)
+            if start_index != -1:
+                # Find the indices covered by the mask string
+                mask_len = len(self.mask_token_str.encode('utf-8', errors='ignore'))
+                for i in range(mask_len):
+                    mask_indices.append(start_index + i)
+        
+        # Encode the sentence, using our special MASK_TOKEN_ID
+        sentence_with_token = sentence.replace(self.mask_token_str, chr(MASK_TOKEN_ID) * len(self.mask_token_str))
+        byte_seq = sentence_with_token.encode('utf-8', errors='ignore')[:self.max_length]
+        
+        padded = np.zeros(self.max_length, dtype=np.int64)
+        padded[:len(byte_seq)] = list(byte_seq)
+        
+        mask_tensor = torch.zeros(self.max_length, dtype=torch.bool)
+        mask_tensor[mask_indices] = True
+        
+        return torch.tensor(padded, dtype=torch.long), mask_tensor
+
+    def __getitem__(self, idx):
+        masked_sentence, original_sentence = self.training_pairs[idx]
+        
+        # Convert masked sentence and get mask positions
+        masked_tensor, mask_positions = self._sentence_to_tensor(masked_sentence, mask_positions=True)
+        
+        # Convert original sentence (no need for mask positions)
+        original_tensor, _ = self._sentence_to_tensor(original_sentence)
+
+        return {
+            'masked_input': masked_tensor,
+            'target_input': original_tensor,
+            'mask_positions': mask_positions, # Tensor of bools indicating where the mask is
+            'masked_text': masked_sentence,
+            'original_text': original_sentence
+        }
+
 def create_svo_compositional_dataset():
     """
     Creates a dataset to test Subject-Verb-Object role understanding.

@@ -140,6 +140,21 @@ class ExperimentConfigs:
         config.N_CLASSES = 2
         return config
 
+    @staticmethod
+    def relational_prediction():
+        """Configuration for the relational prediction (MLM) task."""
+        config = SFTConfig()
+        config.SEMANTIC_DIM = 64
+        config.FIELD_RESOLUTION = 64
+        config.MAX_LENGTH = 64
+        config.N_LAYERS = 4  # A deeper model might be needed for this task
+        config.EPOCHS = 50   # This task requires more extensive training
+        config.BATCH_SIZE = 8 # Can use a slightly larger batch
+        config.LEARNING_RATE = 1e-3
+        # N_Classes is not used for the MLM task, but we set it for model init
+        config.N_CLASSES = 2 
+        return config
+
 
 # Research-specific configurations
 class ResearchConfigs:
